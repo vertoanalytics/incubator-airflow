@@ -19,6 +19,7 @@
 import unittest
 import json
 
+from botocore.exceptions import ClientError
 
 try:
     from unittest import mock
@@ -81,14 +82,28 @@ class TestGlueJobHook(unittest.TestCase):
         mock_script.return_value = mock.Mock(return_value=some_script)
 
         mock_glue_job = mock_get_conn.return_value.create_job()
-        glue_job = AwsGlueJobHook(job_name='aws_test_glue_job',
-                                  desc='This is test case job from Airflow',
-                                  script_location=some_script,
-                                  iam_role_name='my_test_role',
-                                  s3_bucket=some_s3_bucket,
-                                  region_name=self.some_aws_region)\
-            .get_or_create_glue_job()
+        mock_get_conn.return_value.get_job.side_effect = \
+            ClientError({"Error": {"Code": "ExpiredTokenException"}}, None)
+        args = {
+            'job_name': 'aws_test_glue_job',
+            'desc': 'This is test case job from Airflow',
+            'script_location': some_script,
+            'iam_role_name': 'my_test_role',
+            's3_bucket': some_s3_bucket,
+            'region_name': self.some_aws_region
+        }
+        with self.assertRaises(ClientError):
+            AwsGlueJobHook(**args).get_or_create_glue_job()
+
+        mock_get_conn.return_value.get_job.side_effect = \
+            ClientError({"Error": {"Code": "EntityNotFoundException"}}, None)
+        glue_job = AwsGlueJobHook(**args).get_or_create_glue_job()
         self.assertEqual(glue_job, mock_glue_job)
+
+        mock_get_conn.return_value.get_job.side_effect = \
+            {'JobName': 'aws_test_glue_job'}
+        glue_job = AwsGlueJobHook(**args).get_or_create_glue_job()
+        self.assertIsNone(glue_job)
 
     @mock.patch.object(AwsGlueJobHook, "job_completion")
     @mock.patch.object(AwsGlueJobHook, "get_or_create_glue_job")
@@ -111,7 +126,7 @@ class TestGlueJobHook(unittest.TestCase):
                                             script_location=some_script,
                                             s3_bucket=some_s3_bucket,
                                             region_name=self.some_aws_region)\
-            .initialize_job(some_script_arguments)
+            .run_job(some_script_arguments)
         self.assertEqual(glue_job_run_state, mock_job_run_state, msg='Mocks but be equal')
 
 

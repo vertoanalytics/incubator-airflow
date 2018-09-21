@@ -18,7 +18,9 @@
 # under the License.
 from __future__ import unicode_literals
 
-from airflow.contrib.hooks.aws_glue_job_hook import AwsGlueJobHook
+from airflow.exceptions import AirflowException
+
+from airflow.contrib.hooks.aws_glue_job_hook import AwsGlueJobHook, SUCCEEDED
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 
@@ -103,11 +105,18 @@ class AWSGlueJobOperator(BaseOperator):
                                   iam_role_name=self.iam_role_name)
 
         self.log.info("Initializing AWS Glue Job: {}".format(self.job_name))
-        glue_job_run = glue_job.initialize_job(self.script_args)
-        self.log.info('AWS Glue Job: {job_name} status: {job_status}. Run Id: {run_id}'
+        glue_job_run = glue_job.run_job(self.script_args)
+        error_message = 'Error message: {}'.format(glue_job_run['ErrorMessage'])\
+            if glue_job_run['ErrorMessage'] else ''
+
+        self.log.info('AWS Glue Job: {job_name} status: {job_status}. '
+                      'Run Id: {run_id}{error_message}'
                       .format(run_id=glue_job_run['JobRunId'],
                               job_name=self.job_name,
-                              job_status=glue_job_run['JobRunState'])
+                              job_status=glue_job_run['JobRunState'],
+                              error_message=error_message)
                       )
-
+        if glue_job_run['JobRunState'] != SUCCEEDED:
+            raise AirflowException('AWS Glue job failed with error: {}'
+                                   .format(glue_job_run['ErrorMessage']))
         self.log.info('Done.')

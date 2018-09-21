@@ -48,10 +48,11 @@ class TestAwsGlueJobOperator(unittest.TestCase):
                                        s3_bucket='some_bucket',
                                        iam_role_name='my_test_role')
 
-    @mock.patch.object(AwsGlueJobHook, 'initialize_job')
-    def test_execute_without_failure(self, mock_initialize_job):
-        mock_initialize_job.return_value = {'JobRunState': 'RUNNING', 'JobRunId': '11111'}
+    @mock.patch.object(AwsGlueJobHook, 'run_job')
+    def test_execute_without_failure(self, mock_run_job):
+        mock_run_job.return_value = {'JobRunState': 'RUNNING',
+                                     'JobRunId': '11111'}
         self.glue.execute(None)
 
-        mock_initialize_job.assert_called_once_with({})
+        mock_run_job.assert_called_once_with({})
         self.assertEqual(self.glue.job_name, 'my_test_job')
