@@ -16,10 +16,16 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+from botocore.exceptions import ClientError
+
 from airflow.exceptions import AirflowException
 from airflow.contrib.hooks.aws_hook import AwsHook
 import os.path
 import time
+
+STOPPED = 'STOPPED'
+FAILED = 'FAILED'
+SUCCEEDED = 'SUCCEEDED'
 
 
 class AwsGlueJobHook(AwsHook):
@@ -101,28 +107,18 @@ class AwsGlueJobHook(AwsHook):
                 )
             )
 
-    def initialize_job(self, script_arguments=None):
-        """
-        Initializes connection with AWS Glue
-        to run job
-        :return:
-        """
-        if self.s3_bucket is None:
-            raise AirflowException(
-                'Could not initialize glue job, '
-                'error: Specify Parameter `s3_bucket`'
-            )
-
+    def run_job(self, script_arguments=None):
+        """Runs an exists AWS Glue job or creates a new one and then
+         waits completion."""
         glue_client = self.get_conn()
-
         try:
-            job_response = self.get_or_create_glue_job()
-            job_name = job_response['Name']
+            self.get_or_create_glue_job()
             job_run = glue_client.start_job_run(
-                JobName=job_name,
+                JobName=self.job_name,
                 Arguments=script_arguments
             )
-            return self.job_completion(job_name, job_run['JobRunId'])
+            self.log.info("Run joj with id: {}".format(job_run['JobRunId']))
+            return self.job_completion(self.job_name, job_run['JobRunId'])
         except Exception as general_error:
             raise AirflowException(
                 'Failed to run aws glue job, error: {error}'.format(
@@ -136,56 +132,67 @@ class AwsGlueJobHook(AwsHook):
         :param run_id:
         :return:
         """
-        glue_client = self.get_conn()
-        job_status = glue_client.get_job_run(
-            JobName=job_name,
-            RunId=run_id,
-            PredecessorsIncluded=True
-        )
-        job_run_state = job_status['JobRun']['JobRunState']
-        failed = job_run_state == 'FAILED'
-        stopped = job_run_state == 'STOPPED'
-        completed = job_run_state == 'SUCCEEDED'
-
         while True:
+            glue_client = self.get_conn()
+            job_status = glue_client.get_job_run(
+                JobName=job_name,
+                RunId=run_id,
+                PredecessorsIncluded=True
+            )
+            job_run_state = job_status['JobRun']['JobRunState']
+            error_message = job_status['JobRun']['ErrorMessage'] \
+                if 'ErrorMessage' in job_status['JobRun'] else None
+            failed = job_run_state == FAILED
+            stopped = job_run_state == STOPPED
+            completed = job_run_state == SUCCEEDED
+
             if failed or stopped or completed:
                 self.log.info("Exiting Job {} Run State: {}"
                               .format(run_id, job_run_state))
-                return {'JobRunState': job_run_state, 'JobRunId': run_id}
+                return {'JobRunState': job_run_state, 'JobRunId': run_id,
+                        'ErrorMessage': error_message}
             else:
                 self.log.info("Polling for AWS Glue Job {} current run state"
                               .format(job_name))
                 time.sleep(6)
 
     def get_or_create_glue_job(self):
-        glue_client = self.get_conn()
         try:
-            self.log.info("Now creating and running AWS Glue Job")
-            s3_log_path = "s3://{bucket_name}/{logs_path}{job_name}"\
-                .format(bucket_name=self.s3_bucket,
-                        logs_path=self.S3_GLUE_LOGS,
-                        job_name=self.job_name)
+            glue_client = self.get_conn()
+            glue_client.get_job(JobName=self.job_name)
+        except ClientError as client_err:
+            if client_err.response['Error']['Code'] == \
+                    'EntityNotFoundException':
+                return self._create_glue_job()
+            raise client_err
 
-            execution_role = self.get_iam_execution_role()
-            script_location = self._check_script_location()
-            create_job_response = glue_client.create_job(
-                Name=self.job_name,
-                Description=self.desc,
-                LogUri=s3_log_path,
-                Role=execution_role['Role']['RoleName'],
-                ExecutionProperty={"MaxConcurrentRuns": self.concurrent_run_limit},
-                Command={"Name": "glueetl", "ScriptLocation": script_location},
-                MaxRetries=self.retry_limit,
-                AllocatedCapacity=self.num_of_dpus
-            )
-            # print(create_job_response)
-            return create_job_response
-        except Exception as general_error:
+    def _create_glue_job(self):
+        glue_client = self.get_conn()
+
+        if self.s3_bucket is None:
             raise AirflowException(
-                'Failed to create aws glue job, error: {error}'.format(
-                    error=str(general_error)
-                )
+                'Could not initialize glue job, '
+                'error: Specify Parameter `s3_bucket`'
             )
+        self.log.info("Now creating and running AWS Glue Job")
+        s3_log_path = "s3://{bucket_name}/{logs_path}{job_name}"\
+            .format(bucket_name=self.s3_bucket,
+                    logs_path=self.S3_GLUE_LOGS,
+                    job_name=self.job_name)
+
+        execution_role = self.get_iam_execution_role()
+        script_location = self._check_script_location()
+        create_job_response = glue_client.create_job(
+            Name=self.job_name,
+            Description=self.desc,
+            LogUri=s3_log_path,
+            Role=execution_role['Role']['RoleName'],
+            ExecutionProperty={"MaxConcurrentRuns": self.concurrent_run_limit},
+            Command={"Name": "glueetl", "ScriptLocation": script_location},
+            MaxRetries=self.retry_limit,
+            AllocatedCapacity=self.num_of_dpus
+        )
+        return create_job_response
 
     def _check_script_location(self):
         """
