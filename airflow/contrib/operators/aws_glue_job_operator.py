@@ -53,7 +53,7 @@ class AWSGlueJobOperator(BaseOperator):
     :param iam_role_name: AWS IAM Role for Glue Job Execution
     :type str
     """
-    template_fields = (script_args,)
+    template_fields = ('script_args',)
     template_ext = ()
     ui_color = '#ededed'
 
