@@ -38,7 +38,7 @@ class AWSGlueJobOperator(BaseOperator):
     :type str
     :param concurrent_run_limit: The maximum number of concurrent runs allowed for a job
     :type int
-    :param script_args: etl script arguments and AWS Glue arguments
+    :param script_args: etl script arguments and AWS Glue arguments (templated)
     :type dict
     :param connections: AWS Glue connections to be used by the job.
     :type list
@@ -53,7 +53,7 @@ class AWSGlueJobOperator(BaseOperator):
     :param iam_role_name: AWS IAM Role for Glue Job Execution
     :type str
     """
-    template_fields = ()
+    template_fields = (script_args,)
     template_ext = ()
     ui_color = '#ededed'
 
