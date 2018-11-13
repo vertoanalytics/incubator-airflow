@@ -117,7 +117,7 @@ class AwsGlueJobHook(AwsHook):
                 JobName=self.job_name,
                 Arguments=script_arguments
             )
-            self.log.info("Run joj with id: {}".format(job_run['JobRunId']))
+            self.log.info("Run job with id: {}".format(job_run['JobRunId']))
             return self.job_completion(self.job_name, job_run['JobRunId'])
         except Exception as general_error:
             raise AirflowException(
