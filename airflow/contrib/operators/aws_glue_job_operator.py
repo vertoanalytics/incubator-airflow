@@ -105,6 +105,7 @@ class AWSGlueJobOperator(BaseOperator):
                                   iam_role_name=self.iam_role_name)
 
         self.log.info("Initializing AWS Glue Job: {}".format(self.job_name))
+        self.log.info("Script args: {}".format(self.script_args))
         glue_job_run = glue_job.run_job(self.script_args)
         error_message = 'Error message: {}'.format(glue_job_run['ErrorMessage'])\
             if glue_job_run['ErrorMessage'] else ''
