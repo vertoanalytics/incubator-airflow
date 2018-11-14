@@ -59,7 +59,7 @@ class AWSGlueJobOperator(BaseOperator):
 
     @apply_defaults
     def __init__(self,
-                 job_name='aws_glue_default_job',
+                 job_name,
                  job_desc='AWS Glue Job with Airflow',
                  script_location=None,
                  concurrent_run_limit=None,
