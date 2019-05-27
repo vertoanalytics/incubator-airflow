@@ -27,6 +27,9 @@ STOPPED = 'STOPPED'
 FAILED = 'FAILED'
 SUCCEEDED = 'SUCCEEDED'
 
+GET_JOB_SLEEP = 6
+MAX_GET_JOB_SLEEP = 8 * 60
+
 
 class AwsGlueJobHook(AwsHook):
     """
@@ -132,13 +135,29 @@ class AwsGlueJobHook(AwsHook):
         :param run_id:
         :return:
         """
+        sleep_time = GET_JOB_SLEEP
         while True:
             glue_client = self.get_conn()
-            job_status = glue_client.get_job_run(
-                JobName=job_name,
-                RunId=run_id,
-                PredecessorsIncluded=True
-            )
+
+            try:
+                job_status = glue_client.get_job_run(
+                    JobName=job_name,
+                    RunId=run_id,
+                    PredecessorsIncluded=True
+                )
+            except ClientError as client_err:
+                # Glue polling rates reached.
+                if client_err.response['Error']['Code'] == \
+                        'ThrottlingException':
+                    sleep_time += GET_JOB_SLEEP
+                    if sleep_time > MAX_GET_JOB_SLEEP:
+                        raise client_err
+                    time.sleep(sleep_time)
+                    continue
+                raise client_err
+
+            sleep_time = GET_JOB_SLEEP
+
             job_run_state = job_status['JobRun']['JobRunState']
             error_message = job_status['JobRun']['ErrorMessage'] \
                 if 'ErrorMessage' in job_status['JobRun'] else None
@@ -154,7 +173,7 @@ class AwsGlueJobHook(AwsHook):
             else:
                 self.log.info("Polling for AWS Glue Job {} current run state"
                               .format(job_name))
-                time.sleep(6)
+                time.sleep(sleep_time)
 
     def get_or_create_glue_job(self):
         try:

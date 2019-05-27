@@ -69,12 +69,13 @@ class TestGlueJobHook(unittest.TestCase):
         iam_role = hook.get_iam_execution_role()
         self.assertIsNotNone(iam_role)
 
+    @mock.patch("airflow.contrib.hooks.aws_glue_job_hook.time")
     @mock.patch.object(AwsGlueJobHook, "_check_script_location")
     @mock.patch.object(AwsGlueJobHook, "get_iam_execution_role")
     @mock.patch.object(AwsGlueJobHook, "get_conn")
     def test_get_or_create_glue_job(self, mock_get_conn,
                                     mock_get_iam_execution_role,
-                                    mock_script):
+                                    mock_script, mock_time):
         mock_get_iam_execution_role.return_value = \
             mock.MagicMock(Role={'RoleName': 'my_test_role'})
         some_script = "s3:/glue-examples/glue-scripts/sample_aws_glue_job.py"
@@ -104,6 +105,14 @@ class TestGlueJobHook(unittest.TestCase):
             {'JobName': 'aws_test_glue_job'}
         glue_job = AwsGlueJobHook(**args).get_or_create_glue_job()
         self.assertIsNone(glue_job)
+
+        mock_get_conn.return_value.get_job_run.side_effect = \
+            ClientError({"Error": {"Code": "ThrottlingException"}}, None)
+        mock_time.reset_mock()
+        with self.assertRaises(ClientError):
+            AwsGlueJobHook(**args).job_completion('job', 'id')
+        self.assertEqual(mock_time.sleep.call_args_list,
+                         [mock.call(i) for i in range(12, 8*60+1, 6)])
 
     @mock.patch.object(AwsGlueJobHook, "job_completion")
     @mock.patch.object(AwsGlueJobHook, "get_or_create_glue_job")
