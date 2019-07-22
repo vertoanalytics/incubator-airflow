@@ -50,8 +50,9 @@ class TestAwsGlueJobOperator(unittest.TestCase):
 
     @mock.patch.object(AwsGlueJobHook, 'run_job')
     def test_execute_without_failure(self, mock_run_job):
-        mock_run_job.return_value = {'JobRunState': 'RUNNING',
-                                     'JobRunId': '11111'}
+        mock_run_job.return_value = {'JobRunState': 'SUCCEEDED',
+                                     'JobRunId': '11111',
+                                     'ErrorMessage': None}
         self.glue.execute(None)
 
         mock_run_job.assert_called_once_with({})

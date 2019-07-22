@@ -52,6 +52,8 @@ class AWSGlueJobOperator(BaseOperator):
     :type str
     :param iam_role_name: AWS IAM Role for Glue Job Execution
     :type str
+    :param no_duplicates: only one job with same arguments should be running
+    :type bool
     """
     template_fields = ('script_args',)
     template_ext = ()
@@ -71,6 +73,7 @@ class AWSGlueJobOperator(BaseOperator):
                  region_name=None,
                  s3_bucket=None,
                  iam_role_name=None,
+                 no_duplicates=False,
                  *args, **kwargs
                  ):
         super(AWSGlueJobOperator, self).__init__(*args, **kwargs)
@@ -86,6 +89,7 @@ class AWSGlueJobOperator(BaseOperator):
         self.region_name = region_name
         self.s3_bucket = s3_bucket
         self.iam_role_name = iam_role_name
+        self.no_duplicates = no_duplicates
 
     def execute(self, context):
         """
@@ -102,7 +106,8 @@ class AWSGlueJobOperator(BaseOperator):
                                   aws_conn_id=self.aws_conn_id,
                                   region_name=self.region_name,
                                   s3_bucket=self.s3_bucket,
-                                  iam_role_name=self.iam_role_name)
+                                  iam_role_name=self.iam_role_name,
+                                  no_duplicates=self.no_duplicates)
 
         self.log.info("Initializing AWS Glue Job: {}".format(self.job_name))
         self.log.info("Script args: {}".format(self.script_args))
