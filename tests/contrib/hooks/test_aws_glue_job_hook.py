@@ -21,6 +21,9 @@ import json
 
 from botocore.exceptions import ClientError
 
+from airflow.exceptions import AirflowException
+
+
 try:
     from unittest import mock
 except ImportError:
@@ -137,6 +140,50 @@ class TestGlueJobHook(unittest.TestCase):
                                             region_name=self.some_aws_region)\
             .run_job(some_script_arguments)
         self.assertEqual(glue_job_run_state, mock_job_run_state, msg='Mocks but be equal')
+
+    @mock.patch.object(AwsGlueJobHook, "job_completion")
+    @mock.patch.object(AwsGlueJobHook, "get_or_create_glue_job")
+    @mock.patch.object(AwsGlueJobHook, "get_conn")
+    def test_running_job_found(self, mock_get_conn,
+                               mock_get_or_create_glue_job,
+                               mock_completion):
+        some_data_path = "s3://glue-datasets/examples/medicare/SampleData.csv"
+        some_script_arguments = {"--s3_input_data_path": some_data_path}
+        some_script = "s3:/glue-examples/glue-scripts/sample_aws_glue_job.py"
+        some_s3_bucket = "my-includes"
+
+        mock_get_or_create_glue_job.Name = mock.Mock(Name='aws_test_glue_job')
+        mock_get_conn.return_value.get_job_runs.return_value = {
+            'JobRuns': [{'JobRunState': 'RUNNING',
+                         'Arguments': some_script_arguments,
+                         'Id': '1234567'}]}
+
+        mock_job_run_state = mock_completion.return_value
+        glue_job_run_state = AwsGlueJobHook(job_name='aws_test_glue_job',
+                                            desc='This is test case job from Airflow',
+                                            iam_role_name='my_test_role',
+                                            script_location=some_script,
+                                            s3_bucket=some_s3_bucket,
+                                            region_name=self.some_aws_region,
+                                            no_duplicates=True)\
+            .run_job(some_script_arguments)
+        self.assertEqual(glue_job_run_state, mock_job_run_state, msg='Mocks but be equal')
+        mock_get_conn.return_value.start_job_run.assert_not_called()
+
+        with self.assertRaises(AirflowException):
+            mock_get_conn.return_value.get_job_runs.return_value = {
+                'JobRuns': [{'JobRunState': 'RUNNING',
+                             'Arguments': some_script_arguments,
+                             'Id': '1234567'}]*2}
+            glue_job_run_state = AwsGlueJobHook(
+                job_name='aws_test_glue_job',
+                desc='This is test case job from Airflow',
+                iam_role_name='my_test_role',
+                script_location=some_script,
+                s3_bucket=some_s3_bucket,
+                region_name=self.some_aws_region,
+                no_duplicates=True).run_job(some_script_arguments)
+
 
 
 if __name__ == '__main__':

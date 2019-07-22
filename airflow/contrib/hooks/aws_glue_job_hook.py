@@ -68,6 +68,7 @@ class AwsGlueJobHook(AwsHook):
                  aws_conn_id='aws_default',
                  region_name=None,
                  iam_role_name=None,
+                 no_duplicates=False,
                  s3_bucket=None, *args, **kwargs):
         self.job_name = job_name
         self.desc = desc
@@ -83,6 +84,7 @@ class AwsGlueJobHook(AwsHook):
         self.S3_PROTOCOL = "s3://"
         self.S3_ARTIFACTS_PREFIX = 'artifacts/glue-scripts/'
         self.S3_GLUE_LOGS = 'logs/glue-logs/'
+        self.no_duplicates = no_duplicates
         super(AwsGlueJobHook, self).__init__(*args, **kwargs)
 
     def get_conn(self):
@@ -114,14 +116,18 @@ class AwsGlueJobHook(AwsHook):
         """Runs an exists AWS Glue job or creates a new one and then
          waits completion."""
         glue_client = self.get_conn()
+        job_run_id = None
+        if self.no_duplicates:
+            job_run_id = self.check_running_jobs(script_arguments)
         try:
-            self.get_or_create_glue_job()
-            job_run = glue_client.start_job_run(
-                JobName=self.job_name,
-                Arguments=script_arguments
-            )
-            self.log.info("Run job with id: {}".format(job_run['JobRunId']))
-            return self.job_completion(self.job_name, job_run['JobRunId'])
+            if job_run_id is None:
+                self.get_or_create_glue_job()
+                job_run_id = glue_client.start_job_run(
+                    JobName=self.job_name,
+                    Arguments=script_arguments
+                )['JobRunId']
+            self.log.info("Run job with id: {}".format(job_run_id))
+            return self.job_completion(self.job_name, job_run_id)
         except Exception as general_error:
             raise AirflowException(
                 'Failed to run aws glue job, error: {error}'.format(
@@ -174,6 +180,29 @@ class AwsGlueJobHook(AwsHook):
                 self.log.info("Polling for AWS Glue Job {} current run state"
                               .format(job_name))
                 time.sleep(sleep_time)
+
+    def check_running_jobs(self, script_arguments):
+        glue_client = self.get_conn()
+        try:
+            runs = glue_client.get_job_runs(JobName=self.job_name)['JobRuns']
+        except Exception as general_error:
+            raise AirflowException(
+                'Failed to check running aws glue jobs, error: {error}'.format(
+                    error=str(general_error)))
+        running = [run for run in runs
+                   if run['JobRunState']
+                   not in [FAILED, STOPPED, SUCCEEDED]
+                   and run['Arguments'] == script_arguments]
+        if not running:
+            return
+        elif len(running) == 1:
+            self.log.info("Found currently running job with same parameters")
+            return running[0]['Id']
+        else:
+            raise AirflowException(
+                "Found multiple running jobs with same parameters: {}"
+                .format(str(running)))
+
 
     def get_or_create_glue_job(self):
         try:
