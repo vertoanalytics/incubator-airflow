@@ -478,7 +478,6 @@ def _run(args, dag, ti):
 
 @cli_utils.action_logging
 def run(args, dag=None):
-    print('(###) run: '+ str(args) + ' (###)')
     sys.stdout.flush()
     hp = guppy.hpy()
     hp.setrelheap()
@@ -532,7 +531,7 @@ def run(args, dag=None):
     logging.shutdown()
 
     h = hp.heap()
-    print('(###) dump (###)')
+    print('(###) '+ str(args) + ' (###)')
     with StringIO() as f:
         h.dump(f)
         v = f.getvalue()
