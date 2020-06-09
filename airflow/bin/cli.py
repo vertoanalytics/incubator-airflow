@@ -71,6 +71,7 @@ from airflow.www_rbac.app import cached_appbuilder
 
 from sqlalchemy.orm import exc
 
+from uuid import uuid4
 from io import StringIO
 import guppy
 
@@ -530,12 +531,14 @@ def run(args, dag=None):
             _run(args, dag, ti)
     logging.shutdown()
 
+    dump_id = str(uuid4())
     h = hp.heap()
-    print('(###) '+ str(args) + ' (###)')
+    print('(###) ran {dump_id} {args} (###)'.format(dump_id=dump_id, args=args)
     with StringIO() as f:
         h.dump(f)
         v = f.getvalue()
-        print(v)
+        for l in v.split('\n'):
+            print('(###) heap {dump_id} {l} (###)'.format(dump_id=dump_id, l=l)
         sys.stdout.flush()
 
 
