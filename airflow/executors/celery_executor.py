@@ -60,7 +60,7 @@ app = Celery(
 @app.task
 def execute_command(command_to_exec):
     log = LoggingMixin().log
-    log.info("Executing command in Celery: %s", command_to_exec)
+    log.info("(###)Executing command in Celery: %s", command_to_exec)
     env = os.environ.copy()
     try:
         subprocess.check_call(command_to_exec, stderr=subprocess.STDOUT,
