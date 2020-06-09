@@ -533,7 +533,7 @@ def run(args, dag=None):
 
     dump_id = str(uuid4())
     h = hp.heap()
-    print('(###) ran {dump_id} {args} (###)'.format(dump_id=dump_id, args=args)
+    print('(###) ran {dump_id} {args} (###)').format(dump_id=dump_id, args=args)
     with StringIO() as f:
         h.dump(f)
         v = f.getvalue()
