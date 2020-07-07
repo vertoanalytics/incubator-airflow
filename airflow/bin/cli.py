@@ -427,7 +427,13 @@ def set_is_paused(is_paused, args, dag=None):
     print("Dag: {}, paused: {}".format(dag, str(dag.is_paused)))
 
 
+def print_memory_usage(point):
+    print('memory usage at', point, psutil.Process(os.getpid()).memory_info().rss)
+
+
 def _run(args, dag, ti):
+    print_memory_usage('<_run')
+
     if args.local:
         run_job = jobs.LocalTaskJob(
             task_instance=ti,
@@ -476,9 +482,12 @@ def _run(args, dag, ti):
         executor.heartbeat()
         executor.end()
 
+    print_memory_usage('_run>')
+
 
 @cli_utils.action_logging
 def run(args, dag=None):
+    print_memory_usage('<run')
     sys.stdout.flush()
     hp = guppy.hpy()
     hp.setrelheap()
@@ -540,6 +549,8 @@ def run(args, dag=None):
         for l in v.split('\n'):
             print('(###) heap {dump_id} {l} (###)'.format(dump_id=dump_id, l=l))
         sys.stdout.flush()
+
+    print_memory_usage('run>')
 
 
 @cli_utils.action_logging
