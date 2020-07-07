@@ -429,6 +429,7 @@ def set_is_paused(is_paused, args, dag=None):
 
 def print_memory_usage(point):
     print('memory usage at', point, psutil.Process(os.getpid()).memory_info().rss)
+    sys.stdout.flush()
 
 
 def _run(args, dag, ti):

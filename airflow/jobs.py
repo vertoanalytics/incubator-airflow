@@ -26,6 +26,7 @@ import getpass
 import logging
 import multiprocessing
 import os
+import psutil
 import signal
 import sys
 import threading
@@ -68,6 +69,9 @@ from airflow.utils.state import State
 Base = models.base.Base    # type: Any
 ID_LEN = models.base.ID_LEN
 
+def print_memory_usage(point):
+    print('memory usage at', point, psutil.Process(os.getpid()).memory_info().rss)
+    sys.stdout.flush()
 
 class BaseJob(Base, LoggingMixin):
     """
@@ -195,6 +199,7 @@ class BaseJob(Base, LoggingMixin):
             self.log.error("Scheduler heartbeat got an exception: %s", str(e))
 
     def run(self):
+        print_memory_usage('<BaseJob.run')
         Stats.incr(self.__class__.__name__.lower() + '_start', 1, 1)
         # Adding an entry in the DB
         with create_session() as session:
@@ -206,7 +211,9 @@ class BaseJob(Base, LoggingMixin):
             self.id = id_
 
             try:
+                print_memory_usage('<BaseJob._execute')
                 self._execute()
+                print_memory_usage('BaseJob._execute>')
                 # In case of max runs or max duration
                 self.state = State.SUCCESS
             except SystemExit:
@@ -221,6 +228,7 @@ class BaseJob(Base, LoggingMixin):
                 session.commit()
 
         Stats.incr(self.__class__.__name__.lower() + '_end', 1, 1)
+        print_memory_usage('BaseJob.run>')
 
     def _execute(self):
         raise NotImplementedError("This method needs to be overridden")
