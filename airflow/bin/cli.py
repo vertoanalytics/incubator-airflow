@@ -444,13 +444,17 @@ def _run(args, dag, ti):
             ignore_task_deps=args.ignore_dependencies,
             ignore_ti_state=args.force,
             pool=args.pool)
+        print_memory_usage('<run_job.run')
         run_job.run()
+        print_memory_usage('run_job.run>')
     elif args.raw:
+        print_memory_usage('<_run_raw_task')
         ti._run_raw_task(
             mark_success=args.mark_success,
             job_id=args.job_id,
             pool=args.pool,
         )
+        print_memory_usage('run_raw_task>')
     else:
         pickle_id = None
         if args.ship_dag:
@@ -467,6 +471,7 @@ def _run(args, dag, ti):
                 print(e)
                 raise e
 
+        print_memory_usage('<using executor')
         executor = GetDefaultExecutor()
         executor.start()
         print("Sending to executor.")
@@ -481,6 +486,7 @@ def _run(args, dag, ti):
             pool=args.pool)
         executor.heartbeat()
         executor.end()
+        print_memory_usage('using executor>')
 
     print_memory_usage('_run>')
 
