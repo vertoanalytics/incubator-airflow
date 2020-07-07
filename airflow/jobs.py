@@ -2537,6 +2537,7 @@ class LocalTaskJob(BaseJob):
         super(LocalTaskJob, self).__init__(*args, **kwargs)
 
     def _execute(self):
+        print_memory_usage('<LocalTaskJob._execute')
         self.task_runner = get_task_runner(self)
 
         def signal_handler(signum, frame):
@@ -2555,6 +2556,7 @@ class LocalTaskJob(BaseJob):
                 job_id=self.id,
                 pool=self.pool):
             self.log.info("Task is not able to be run")
+            print_memory_usage('LocalTaskJob._execute>')
             return
 
         try:
@@ -2565,9 +2567,11 @@ class LocalTaskJob(BaseJob):
                                                'scheduler_zombie_task_threshold')
             while True:
                 # Monitor the task to see if it's done
+                print_memory_usage('LocalTaskJob monitoring')
                 return_code = self.task_runner.return_code()
                 if return_code is not None:
                     self.log.info("Task exited with return code %s", return_code)
+                    print_memory_usage('LocalTaskJob._execute>')
                     return
 
                 # Periodically heartbeat so that the scheduler doesn't think this
@@ -2595,6 +2599,8 @@ class LocalTaskJob(BaseJob):
                                                    heartbeat_time_limit))
         finally:
             self.on_kill()
+
+        print_memory_usage('LocalTaskJob._execute>')
 
     def on_kill(self):
         self.task_runner.terminate()
