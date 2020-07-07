@@ -49,6 +49,7 @@ import jinja2
 import json
 import logging
 import os
+import psutil
 import pendulum
 import pickle
 import re
@@ -120,6 +121,11 @@ install_aliases()
 XCOM_RETURN_KEY = 'return_value'
 
 Stats = settings.Stats
+
+
+def print_memory_usage(point):
+    print('memory usage at', point, psutil.Process(os.getpid()).memory_info().rss)
+    sys.stdout.flush()
 
 
 class InvalidFernetToken(Exception):
@@ -689,6 +695,7 @@ class TaskInstance(Base, LoggingMixin):
     )
 
     def __init__(self, task, execution_date, state=None):
+        print_memory_usage('<TaskInstance.__init__')
         self.dag_id = task.dag_id
         self.task_id = task.task_id
         self.task = task
@@ -723,6 +730,7 @@ class TaskInstance(Base, LoggingMixin):
         # Is this TaskInstance being currently running within `airflow run --raw`.
         # Not persisted to the database so only valid for the current process
         self.raw = False
+        print_memory_usage('TaskInstance.__init__>')
 
     @reconstructor
     def init_on_load(self):
@@ -1276,6 +1284,9 @@ class TaskInstance(Base, LoggingMixin):
         :return: whether the state was changed to running or not
         :rtype: bool
         """
+
+        print_memory_usage('<TaskInstance._check_and_change_state_before_execution')
+        
         task = self.task
         self.pool = pool or task.pool
         self.test_mode = test_mode
@@ -1298,6 +1309,7 @@ class TaskInstance(Base, LoggingMixin):
                 session=session,
                 verbose=True):
             session.commit()
+            print_memory_usage('TaskInstance._check_and_change_state_before_execution>')
             return False
 
         # TODO: Logging needs cleanup, not clear what is being printed
@@ -1340,6 +1352,7 @@ class TaskInstance(Base, LoggingMixin):
             self.log.info("Queuing into pool %s", self.pool)
             session.merge(self)
             session.commit()
+            print_memory_usage('TaskInstance._check_and_change_state_before_execution>')
             return False
 
         # Another worker might have started running this task instance while
@@ -1347,6 +1360,7 @@ class TaskInstance(Base, LoggingMixin):
         if self.state == State.RUNNING:
             self.log.warning("Task Instance already running %s", self)
             session.commit()
+            print_memory_usage('TaskInstance._check_and_change_state_before_execution>')
             return False
 
         # print status message
@@ -1372,6 +1386,7 @@ class TaskInstance(Base, LoggingMixin):
                 self.log.info("Marking success for %s on %s", self.task, self.execution_date)
             else:
                 self.log.info("Executing %s on %s", self.task, self.execution_date)
+        print_memory_usage('TaskInstance._check_and_change_state_before_execution>')
         return True
 
     @provide_session
@@ -1395,6 +1410,8 @@ class TaskInstance(Base, LoggingMixin):
         :param pool: specifies the pool to use to run the task instance
         :type pool: str
         """
+        print_memory_usage('<TaskInstance._run_raw_task')
+        
         task = self.task
         self.pool = pool or task.pool
         self.test_mode = test_mode
@@ -1479,12 +1496,14 @@ class TaskInstance(Base, LoggingMixin):
         except AirflowRescheduleException as reschedule_exception:
             self.refresh_from_db()
             self._handle_reschedule(actual_start_date, reschedule_exception, test_mode, context)
+            print_memory_usage('TaskInstance._run_raw_task>')
             return
         except AirflowException as e:
             self.refresh_from_db()
             # for case when task is marked as success/failed externally
             # current behavior doesn't hit the success callback
             if self.state in {State.SUCCESS, State.FAILED}:
+                print_memory_usage('TaskInstance._run_raw_task>')
                 return
             else:
                 self.handle_failure(e, test_mode, context)
@@ -1508,6 +1527,7 @@ class TaskInstance(Base, LoggingMixin):
             session.add(Log(self.state, self))
             session.merge(self)
         session.commit()
+        print_memory_usage('TaskInstance._run_raw_task>')
 
     @provide_session
     def run(
@@ -1522,6 +1542,7 @@ class TaskInstance(Base, LoggingMixin):
             job_id=None,
             pool=None,
             session=None):
+        print_memory_usage('<TaskInstance.run')
         res = self._check_and_change_state_before_execution(
             verbose=verbose,
             ignore_all_deps=ignore_all_deps,
@@ -1540,6 +1561,7 @@ class TaskInstance(Base, LoggingMixin):
                 job_id=job_id,
                 pool=pool,
                 session=session)
+        print_memory_usage('TaskInstance.run>')
 
     def dry_run(self):
         task = self.task
