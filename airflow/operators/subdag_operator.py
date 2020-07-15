@@ -64,31 +64,6 @@ class SubDagOperator(BaseOperator):
                 "'{d}.{t}'; received '{rcvd}'.".format(
                     d=dag.dag_id, t=kwargs['task_id'], rcvd=subdag.dag_id))
 
-        # validate that subdag operator and subdag tasks don't have a
-        # pool conflict
-        if self.pool:
-            conflicts = [t for t in subdag.tasks if t.pool == self.pool]
-            if conflicts:
-                # only query for pool conflicts if one may exist
-                pool = (
-                    session
-                    .query(Pool)
-                    .filter(Pool.slots == 1)
-                    .filter(Pool.pool == self.pool)
-                    .first()
-                )
-                if pool and any(t.pool == self.pool for t in subdag.tasks):
-                    raise AirflowException(
-                        'SubDagOperator {sd} and subdag task{plural} {t} both '
-                        'use pool {p}, but the pool only has 1 slot. The '
-                        'subdag tasks will never run.'.format(
-                            sd=self.task_id,
-                            plural=len(conflicts) > 1,
-                            t=', '.join(t.task_id for t in conflicts),
-                            p=self.pool
-                        )
-                    )
-
         self.subdag = subdag
         # Airflow pool is not honored by SubDagOperator.
         # Hence resources could be consumed by SubdagOperators
