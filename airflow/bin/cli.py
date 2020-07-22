@@ -28,6 +28,7 @@ import subprocess
 import textwrap
 import random
 import string
+import faulthandler
 from importlib import import_module
 
 import getpass
@@ -90,24 +91,6 @@ if "BUILDING_AIRFLOW_DOCS" in os.environ:
 
 def sigint_handler(sig, frame):
     sys.exit(0)
-
-
-def sigquit_handler(sig, frame):
-    """Helps debug deadlocks by printing stacktraces when this gets a SIGQUIT
-    e.g. kill -s QUIT <PID> or CTRL+\
-    """
-    print("Dumping stack traces for all threads in PID {}".format(os.getpid()))
-    id_to_name = dict([(th.ident, th.name) for th in threading.enumerate()])
-    code = []
-    for thread_id, stack in sys._current_frames().items():
-        code.append("\n# Thread: {}({})"
-                    .format(id_to_name.get(thread_id, ""), thread_id))
-        for filename, line_number, name, line in traceback.extract_stack(stack):
-            code.append('File: "{}", line {}, in {}'
-                        .format(filename, line_number, name))
-            if line:
-                code.append("  {}".format(line.strip()))
-    print("\n".join(code))
 
 
 def setup_logging(filename):
@@ -1036,7 +1019,8 @@ def scheduler(args):
     else:
         signal.signal(signal.SIGINT, sigint_handler)
         signal.signal(signal.SIGTERM, sigint_handler)
-        signal.signal(signal.SIGQUIT, sigquit_handler)
+        faulthandler.register(signal.SIGQUIT)
+        faulthandler.enable()
         job.run()
 
 
