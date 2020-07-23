@@ -147,7 +147,6 @@ class CeleryExecutor(BaseExecutor):
         if self._sync_parallelism == 0:
             self._sync_parallelism = max(1, cpu_count() - 1)
 
-        self._sync_pool = None
         self.tasks = {}
         self.last_state = {}
 
@@ -243,20 +242,16 @@ class CeleryExecutor(BaseExecutor):
         self.log.debug("Inquiring about %s celery task(s) using %s processes",
                        len(self.tasks), num_processes)
 
-        # Recreate the process pool each sync in case processes in the pool die
-        self._sync_pool = Pool(processes=num_processes)
-
         # Use chunking instead of a work queue to reduce context switching since tasks are
         # roughly uniform in size
         chunksize = self._num_tasks_per_fetch_process()
 
         self.log.debug("Waiting for inquiries to complete...")
-        task_keys_to_states = self._sync_pool.map(
-            fetch_celery_task_state,
-            self.tasks.items(),
-            chunksize=chunksize)
-        self._sync_pool.close()
-        self._sync_pool.join()
+        with Pool(processes=num_processes) as sync_pool:
+            task_keys_to_states = sync_pool.map(
+                fetch_celery_task_state,
+                self.tasks.items(),
+                chunksize=chunksize)
         self.log.debug("Inquiries completed.")
 
         for key_and_state in task_keys_to_states:
