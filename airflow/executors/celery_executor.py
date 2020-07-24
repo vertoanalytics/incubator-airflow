@@ -22,7 +22,6 @@ import os
 import subprocess
 import time
 import traceback
-from multiprocessing import Pool, cpu_count
 
 from celery import Celery
 from celery import states as celery_states
@@ -139,15 +138,6 @@ class CeleryExecutor(BaseExecutor):
     def __init__(self):
         super(CeleryExecutor, self).__init__()
 
-        # Celery doesn't support querying the state of multiple tasks in parallel
-        # (which can become a bottleneck on bigger clusters) so we use
-        # a multiprocessing pool to speed this up.
-        # How many worker processes are created for checking celery task state.
-        self._sync_parallelism = conf.getint('celery', 'SYNC_PARALLELISM')
-        if self._sync_parallelism == 0:
-            self._sync_parallelism = max(1, cpu_count() - 1)
-
-        self._sync_pool = None
         self.tasks = {}
         self.last_state = {}
 
@@ -205,19 +195,12 @@ class CeleryExecutor(BaseExecutor):
             cached_celery_backend = tasks[0].backend
 
         if task_tuples_to_send:
-            # Use chunking instead of a work queue to reduce context switching
-            # since tasks are roughly uniform in size
-            chunksize = self._num_tasks_per_send_process(len(task_tuples_to_send))
-            num_processes = min(len(task_tuples_to_send), self._sync_parallelism)
+            key_and_async_results = []
 
-            send_pool = Pool(processes=num_processes)
-            key_and_async_results = send_pool.map(
-                send_task_to_executor,
-                task_tuples_to_send,
-                chunksize=chunksize)
+            for task_tuple in task_tuples_to_send:
+                key_and_async_results.append(
+                    send_task_to_executor(task_tuple))
 
-            send_pool.close()
-            send_pool.join()
             self.log.debug('Sent all tasks.')
 
             for key, command, result in key_and_async_results:
@@ -235,28 +218,13 @@ class CeleryExecutor(BaseExecutor):
                     self.last_state[key] = celery_states.PENDING
 
     def sync(self):
-        num_processes = min(len(self.tasks), self._sync_parallelism)
-        if num_processes == 0:
-            self.log.debug("No task to query celery, skipping sync")
-            return
-
-        self.log.debug("Inquiring about %s celery task(s) using %s processes",
-                       len(self.tasks), num_processes)
-
-        # Recreate the process pool each sync in case processes in the pool die
-        self._sync_pool = Pool(processes=num_processes)
-
-        # Use chunking instead of a work queue to reduce context switching since tasks are
-        # roughly uniform in size
-        chunksize = self._num_tasks_per_fetch_process()
+        self.log.debug("Inquiring about %s celery task(s)",
+                       len(self.tasks))
 
         self.log.debug("Waiting for inquiries to complete...")
-        task_keys_to_states = self._sync_pool.map(
-            fetch_celery_task_state,
-            self.tasks.items(),
-            chunksize=chunksize)
-        self._sync_pool.close()
-        self._sync_pool.join()
+        task_keys_to_states = []
+        for task in self.tasks.items():
+            task_keys_to_states.append(fetch_celery_task_state(task))
         self.log.debug("Inquiries completed.")
 
         for key_and_state in task_keys_to_states:
