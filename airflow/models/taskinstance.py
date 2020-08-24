@@ -1220,6 +1220,9 @@ class TaskInstance(Base, LoggingMixin):
             session.merge(self)
         session.commit()
 
+        # Flush log so it's not lost when re-raising exception
+        self.log.flush()
+
     def is_eligible_to_retry(self):
         """Is task instance is eligible for retry"""
         return self.task.retries and self.try_number <= self.max_tries
