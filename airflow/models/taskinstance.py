@@ -1149,10 +1149,12 @@ class TaskInstance(Base, LoggingMixin):
         Stats.incr('operator_failures_{}'.format(task.__class__.__name__), 1, 1)
         Stats.incr('ti_failures')
         if not test_mode:
-            session.add(Log(State.FAILED, self))
+            if session is not None:
+                session.add(Log(State.FAILED, self))
 
         # Log failure duration
-        session.add(TaskFail(task, self.execution_date, self.start_date, self.end_date))
+        if session is not None:
+            session.add(TaskFail(task, self.execution_date, self.start_date, self.end_date))
 
         if context is not None:
             context['exception'] = error
@@ -1216,9 +1218,14 @@ class TaskInstance(Base, LoggingMixin):
             self.log.error("Failed at executing callback")
             self.log.exception(e3)
 
-        if not test_mode:
-            session.merge(self)
-        session.commit()
+        if session is not None:
+            if not test_mode:
+                session.merge(self)
+            session.commit()
+                
+        # Flush log so it's not lost when re-raising
+        for handler in self.log.handlers:
+            handler.flush()
 
     def is_eligible_to_retry(self):
         """Is task instance is eligible for retry"""
