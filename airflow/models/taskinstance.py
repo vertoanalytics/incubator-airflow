@@ -1458,6 +1458,11 @@ class TaskInstance(Base, LoggingMixin):  # pylint: disable=R0902,R0904
             session.merge(self)
         session.commit()
 
+        # Flush log so it's not lost
+        # Not sure if it covers 100% of scenarios but it does seem to help
+        for handler in self.log.handlers:
+            handler.flush()
+
     def is_eligible_to_retry(self):
         """Is task instance is eligible for retry"""
         return self.task.retries and self.try_number <= self.max_tries

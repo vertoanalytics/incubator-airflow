@@ -21,10 +21,12 @@ import signal
 import daemon
 from daemon.pidfile import TimeoutPIDLockFile
 
+import faulthandler
+
 from airflow import settings
 from airflow.jobs.scheduler_job import SchedulerJob
 from airflow.utils import cli as cli_utils
-from airflow.utils.cli import process_subdir, setup_locations, setup_logging, sigint_handler, sigquit_handler
+from airflow.utils.cli import process_subdir, setup_locations, setup_logging, sigint_handler
 
 
 @cli_utils.action_logging
@@ -59,5 +61,6 @@ def scheduler(args):
     else:
         signal.signal(signal.SIGINT, sigint_handler)
         signal.signal(signal.SIGTERM, sigint_handler)
-        signal.signal(signal.SIGQUIT, sigquit_handler)
+        faulthandler.register(signal.SIGQUIT)
+        faulthandler.enable()
         job.run()

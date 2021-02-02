@@ -78,7 +78,6 @@ class SubDagOperator(BaseSensorOperator):
         self.propagate_skipped_state = propagate_skipped_state
 
         self._validate_dag(kwargs)
-        self._validate_pool(session)
 
     def _validate_dag(self, kwargs):
         dag = kwargs.get('dag') or DagContext.get_current_dag()
