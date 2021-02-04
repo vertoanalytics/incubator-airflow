@@ -19,7 +19,7 @@
 from botocore.exceptions import ClientError
 
 from airflow.exceptions import AirflowException
-from airflow.contrib.hooks.aws_hook import AwsHook
+from airflow.providers.amazon.aws.hooks.base_aws import AwsBaseHook
 import os.path
 import time
 
@@ -31,7 +31,7 @@ GET_JOB_SLEEP = 6
 MAX_GET_JOB_SLEEP = 8 * 60
 
 
-class AwsGlueJobHook(AwsHook):
+class AwsGlueJobHook(AwsBaseHook):
     """
     Interact with AWS Glue - create job, trigger, crawler
 
