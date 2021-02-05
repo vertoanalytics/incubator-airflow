@@ -85,11 +85,7 @@ class AwsGlueJobHook(AwsBaseHook):
         self.S3_ARTIFACTS_PREFIX = 'artifacts/glue-scripts/'
         self.S3_GLUE_LOGS = 'logs/glue-logs/'
         self.no_duplicates = no_duplicates
-        super(AwsGlueJobHook, self).__init__(*args, **kwargs)
-
-    def get_conn(self):
-        conn = self.get_client_type('glue', self.region_name)
-        return conn
+        super(AwsGlueJobHook, self).__init__(*args,**kwargs)
 
     def list_jobs(self):
         conn = self.get_conn()

@@ -107,7 +107,8 @@ class AWSGlueJobOperator(BaseOperator):
                                   region_name=self.region_name,
                                   s3_bucket=self.s3_bucket,
                                   iam_role_name=self.iam_role_name,
-                                  no_duplicates=self.no_duplicates)
+                                  no_duplicates=self.no_duplicates,
+                                  client_type='glue')
 
         self.log.info("Initializing AWS Glue Job: {}".format(self.job_name))
         self.log.info("Script args: {}".format(self.script_args))
