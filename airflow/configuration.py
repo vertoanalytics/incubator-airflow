@@ -30,6 +30,7 @@ from collections import OrderedDict
 
 # Ignored Mypy on configparser because it thinks the configparser module has no _UNSET attribute
 from configparser import _UNSET, ConfigParser, NoOptionError, NoSectionError  # type: ignore
+from distutils.version import StrictVersion
 from json.decoder import JSONDecodeError
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -131,39 +132,43 @@ class AirflowConfigParser(ConfigParser):  # pylint: disable=too-many-ancestors
         ('webserver', 'secret_key'),
     }
 
-    # A mapping of (new option -> old option). where option is a tuple of section name and key.
+    # A mapping of (new section, new option) -> (old section, old option, since_version).
     # When reading new option, the old option will be checked to see if it exists. If it does a
     # DeprecationWarning will be issued and the old option will be used instead
     deprecated_options = {
-        ('celery', 'worker_precheck'): ('core', 'worker_precheck'),
-        ('logging', 'base_log_folder'): ('core', 'base_log_folder'),
-        ('logging', 'remote_logging'): ('core', 'remote_logging'),
-        ('logging', 'remote_log_conn_id'): ('core', 'remote_log_conn_id'),
-        ('logging', 'remote_base_log_folder'): ('core', 'remote_base_log_folder'),
-        ('logging', 'encrypt_s3_logs'): ('core', 'encrypt_s3_logs'),
-        ('logging', 'logging_level'): ('core', 'logging_level'),
-        ('logging', 'fab_logging_level'): ('core', 'fab_logging_level'),
-        ('logging', 'logging_config_class'): ('core', 'logging_config_class'),
-        ('logging', 'colored_console_log'): ('core', 'colored_console_log'),
-        ('logging', 'colored_log_format'): ('core', 'colored_log_format'),
-        ('logging', 'colored_formatter_class'): ('core', 'colored_formatter_class'),
-        ('logging', 'log_format'): ('core', 'log_format'),
-        ('logging', 'simple_log_format'): ('core', 'simple_log_format'),
-        ('logging', 'task_log_prefix_template'): ('core', 'task_log_prefix_template'),
-        ('logging', 'log_filename_template'): ('core', 'log_filename_template'),
-        ('logging', 'log_processor_filename_template'): ('core', 'log_processor_filename_template'),
-        ('logging', 'dag_processor_manager_log_location'): ('core', 'dag_processor_manager_log_location'),
-        ('logging', 'task_log_reader'): ('core', 'task_log_reader'),
-        ('metrics', 'statsd_on'): ('scheduler', 'statsd_on'),
-        ('metrics', 'statsd_host'): ('scheduler', 'statsd_host'),
-        ('metrics', 'statsd_port'): ('scheduler', 'statsd_port'),
-        ('metrics', 'statsd_prefix'): ('scheduler', 'statsd_prefix'),
-        ('metrics', 'statsd_allow_list'): ('scheduler', 'statsd_allow_list'),
-        ('metrics', 'stat_name_handler'): ('scheduler', 'stat_name_handler'),
-        ('metrics', 'statsd_datadog_enabled'): ('scheduler', 'statsd_datadog_enabled'),
-        ('metrics', 'statsd_datadog_tags'): ('scheduler', 'statsd_datadog_tags'),
-        ('metrics', 'statsd_custom_client_path'): ('scheduler', 'statsd_custom_client_path'),
-        ('scheduler', 'parsing_processes'): ('scheduler', 'max_threads'),
+        ('celery', 'worker_precheck'): ('core', 'worker_precheck', '2.0.0'),
+        ('logging', 'base_log_folder'): ('core', 'base_log_folder', '2.0.0'),
+        ('logging', 'remote_logging'): ('core', 'remote_logging', '2.0.0'),
+        ('logging', 'remote_log_conn_id'): ('core', 'remote_log_conn_id', '2.0.0'),
+        ('logging', 'remote_base_log_folder'): ('core', 'remote_base_log_folder', '2.0.0'),
+        ('logging', 'encrypt_s3_logs'): ('core', 'encrypt_s3_logs', '2.0.0'),
+        ('logging', 'logging_level'): ('core', 'logging_level', '2.0.0'),
+        ('logging', 'fab_logging_level'): ('core', 'fab_logging_level', '2.0.0'),
+        ('logging', 'logging_config_class'): ('core', 'logging_config_class', '2.0.0'),
+        ('logging', 'colored_console_log'): ('core', 'colored_console_log', '2.0.0'),
+        ('logging', 'colored_log_format'): ('core', 'colored_log_format', '2.0.0'),
+        ('logging', 'colored_formatter_class'): ('core', 'colored_formatter_class', '2.0.0'),
+        ('logging', 'log_format'): ('core', 'log_format', '2.0.0'),
+        ('logging', 'simple_log_format'): ('core', 'simple_log_format', '2.0.0'),
+        ('logging', 'task_log_prefix_template'): ('core', 'task_log_prefix_template', '2.0.0'),
+        ('logging', 'log_filename_template'): ('core', 'log_filename_template', '2.0.0'),
+        ('logging', 'log_processor_filename_template'): ('core', 'log_processor_filename_template', '2.0.0'),
+        ('logging', 'dag_processor_manager_log_location'): (
+            'core',
+            'dag_processor_manager_log_location',
+            '2.0.0',
+        ),
+        ('logging', 'task_log_reader'): ('core', 'task_log_reader', '2.0.0'),
+        ('metrics', 'statsd_on'): ('scheduler', 'statsd_on', '2.0.0'),
+        ('metrics', 'statsd_host'): ('scheduler', 'statsd_host', '2.0.0'),
+        ('metrics', 'statsd_port'): ('scheduler', 'statsd_port', '2.0.0'),
+        ('metrics', 'statsd_prefix'): ('scheduler', 'statsd_prefix', '2.0.0'),
+        ('metrics', 'statsd_allow_list'): ('scheduler', 'statsd_allow_list', '2.0.0'),
+        ('metrics', 'stat_name_handler'): ('scheduler', 'stat_name_handler', '2.0.0'),
+        ('metrics', 'statsd_datadog_enabled'): ('scheduler', 'statsd_datadog_enabled', '2.0.0'),
+        ('metrics', 'statsd_datadog_tags'): ('scheduler', 'statsd_datadog_tags', '2.0.0'),
+        ('metrics', 'statsd_custom_client_path'): ('scheduler', 'statsd_custom_client_path', '2.0.0'),
+        ('scheduler', 'parsing_processes'): ('scheduler', 'max_threads', '1.10.14'),
     }
 
     # A mapping of old default values that we want to change and warn the user
@@ -199,7 +204,7 @@ class AirflowConfigParser(ConfigParser):  # pylint: disable=too-many-ancestors
 
         self.is_validated = False
 
-    def _validate(self):
+    def validate(self):
 
         self._validate_config_dependencies()
 
@@ -230,10 +235,15 @@ class AirflowConfigParser(ConfigParser):  # pylint: disable=too-many-ancestors
             'SequentialExecutor',
         )
         is_sqlite = "sqlite" in self.get('core', 'sql_alchemy_conn')
-        if is_executor_without_sqlite_support and is_sqlite:
-            raise AirflowConfigException(
-                "error: cannot use sqlite with the {}".format(self.get('core', 'executor'))
-            )
+        if is_sqlite and is_executor_without_sqlite_support:
+            raise AirflowConfigException(f"error: cannot use sqlite with the {self.get('core', 'executor')}")
+        if is_sqlite:
+            import sqlite3
+
+            # Some of the features in storing rendered fields require sqlite version >= 3.15.0
+            min_sqlite_version = '3.15.0'
+            if StrictVersion(sqlite3.sqlite_version) < StrictVersion(min_sqlite_version):
+                raise AirflowConfigException(f"error: cannot use sqlite version < {min_sqlite_version}")
 
         if self.has_option('core', 'mp_start_method'):
             mp_start_method = self.get('core', 'mp_start_method')
@@ -315,7 +325,9 @@ class AirflowConfigParser(ConfigParser):  # pylint: disable=too-many-ancestors
         section = str(section).lower()
         key = str(key).lower()
 
-        deprecated_section, deprecated_key = self.deprecated_options.get((section, key), (None, None))
+        deprecated_section, deprecated_key, _ = self.deprecated_options.get(
+            (section, key), (None, None, None)
+        )
 
         option = self._get_environment_variables(deprecated_key, deprecated_section, key, section)
         if option is not None:
@@ -452,11 +464,9 @@ class AirflowConfigParser(ConfigParser):  # pylint: disable=too-many-ancestors
 
     def read(self, filenames, encoding=None):
         super().read(filenames=filenames, encoding=encoding)
-        self._validate()
 
     def read_dict(self, dictionary, source='<dict>'):
         super().read_dict(dictionary=dictionary, source=source)
-        self._validate()
 
     def has_option(self, section, option):
         try:
@@ -895,7 +905,7 @@ def getsection(*args, **kwargs):  # noqa: D103
         DeprecationWarning,
         stacklevel=2,
     )
-    return conf.getint(*args, **kwargs)
+    return conf.getsection(*args, **kwargs)
 
 
 def has_option(*args, **kwargs):  # noqa: D103
@@ -993,3 +1003,5 @@ def initialize_secrets_backends() -> List[BaseSecretsBackend]:
 
 
 secrets_backend_list = initialize_secrets_backends()
+
+conf.validate()

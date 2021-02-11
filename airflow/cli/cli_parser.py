@@ -30,7 +30,7 @@ from airflow import settings
 from airflow.cli.commands.legacy_commands import check_legacy_command
 from airflow.configuration import conf
 from airflow.exceptions import AirflowException
-from airflow.executors import executor_constants
+from airflow.executors.executor_constants import CELERY_EXECUTOR, CELERY_KUBERNETES_EXECUTOR
 from airflow.utils.cli import ColorMode
 from airflow.utils.helpers import partition
 from airflow.utils.module_loading import import_string
@@ -58,7 +58,7 @@ class DefaultHelpParser(argparse.ArgumentParser):
     def _check_value(self, action, value):
         """Override _check_value and check conditionally added command"""
         executor = conf.get('core', 'EXECUTOR')
-        if value == 'celery' and executor != executor_constants.CELERY_EXECUTOR:
+        if value == 'celery' and executor not in (CELERY_EXECUTOR, CELERY_KUBERNETES_EXECUTOR):
             message = f'celery subcommand works only with CeleryExecutor, your current executor: {executor}'
             raise ArgumentError(action, message)
         if value == 'kubernetes':
@@ -178,7 +178,7 @@ ARG_OUTPUT = Arg(
         "-o",
         "--output",
     ),
-    help=("Output format. Allowed values: json, yaml, table (default: table)"),
+    help="Output format. Allowed values: json, yaml, table (default: table)",
     metavar="(table, json, yaml)",
     choices=("table", "json", "yaml"),
     default="table",
@@ -405,6 +405,7 @@ ARG_SHIP_DAG = Arg(
     ("--ship-dag",), help="Pickles (serializes) the DAG and ships it to the worker", action="store_true"
 )
 ARG_PICKLE = Arg(("-p", "--pickle"), help="Serialized pickle object of the entire dag (used internally)")
+ARG_ERROR_FILE = Arg(("--error-file",), help="File to store task failure error")
 ARG_JOB_ID = Arg(("-j", "--job-id"), help=argparse.SUPPRESS)
 ARG_CFG_PATH = Arg(("--cfg-path",), help="Path to config file to use instead of airflow.cfg")
 ARG_MIGRATION_TIMEOUT = Arg(
@@ -954,6 +955,7 @@ TASKS_COMMANDS = (
             ARG_PICKLE,
             ARG_JOB_ID,
             ARG_INTERACTIVE,
+            ARG_ERROR_FILE,
             ARG_SHUT_DOWN_LOGGING,
         ),
     ),
@@ -1023,19 +1025,13 @@ POOLS_COMMANDS = (
         name='import',
         help='Import pools',
         func=lazy_load_command('airflow.cli.commands.pool_command.pool_import'),
-        args=(
-            ARG_POOL_IMPORT,
-            ARG_OUTPUT,
-        ),
+        args=(ARG_POOL_IMPORT,),
     ),
     ActionCommand(
         name='export',
         help='Export all pools',
         func=lazy_load_command('airflow.cli.commands.pool_command.pool_export'),
-        args=(
-            ARG_POOL_EXPORT,
-            ARG_OUTPUT,
-        ),
+        args=(ARG_POOL_EXPORT,),
     ),
 )
 VARIABLES_COMMANDS = (

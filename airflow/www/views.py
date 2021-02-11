@@ -87,6 +87,7 @@ from airflow.ti_deps.dep_context import DepContext
 from airflow.ti_deps.dependencies_deps import RUNNING_DEPS, SCHEDULER_QUEUED_DEPS
 from airflow.utils import json as utils_json, timezone
 from airflow.utils.dates import infer_time_unit, scale_time_units
+from airflow.utils.docs import get_docs_url
 from airflow.utils.helpers import alchemy_to_dict
 from airflow.utils.log.log_reader import TaskLogReader
 from airflow.utils.session import create_session, provide_session
@@ -146,8 +147,7 @@ def get_date_time_num_runs_dag_runs_form_data(www_request, session, dag):
         base_date = (date_time + timedelta(seconds=1)).replace(microsecond=0)
 
     default_dag_run = conf.getint('webserver', 'default_dag_run_display_number')
-    num_runs = www_request.args.get('num_runs')
-    num_runs = int(num_runs) if num_runs else default_dag_run
+    num_runs = www_request.args.get('num_runs', default=default_dag_run, type=int)
 
     drs = (
         session.query(DagRun)
@@ -443,16 +443,9 @@ class Airflow(AirflowBaseView):  # noqa: D101  pylint: disable=too-many-public-m
         hide_paused_dags_by_default = conf.getboolean('webserver', 'hide_paused_dags_by_default')
 
         default_dag_run = conf.getint('webserver', 'default_dag_run_display_number')
-        num_runs = request.args.get('num_runs')
-        num_runs = int(num_runs) if num_runs else default_dag_run
+        num_runs = request.args.get('num_runs', default=default_dag_run, type=int)
 
-        def get_int_arg(value, default=0):
-            try:
-                return int(value)
-            except ValueError:
-                return default
-
-        arg_current_page = request.args.get('page', '0')
+        current_page = request.args.get('page', default=0, type=int)
         arg_search_query = request.args.get('search')
         arg_tags_filter = request.args.getlist('tags')
         arg_status_filter = request.args.get('status')
@@ -482,7 +475,6 @@ class Airflow(AirflowBaseView):  # noqa: D101  pylint: disable=too-many-public-m
             arg_status_filter = status
 
         dags_per_page = PAGE_SIZE
-        current_page = get_int_arg(arg_current_page, default=0)
 
         start = current_page * dags_per_page
         end = start + dags_per_page
@@ -537,8 +529,17 @@ class Airflow(AirflowBaseView):  # noqa: D101  pylint: disable=too-many-public-m
                 .all()
             )
 
-            user_permissions = current_app.appbuilder.sm.get_all_permissions_views()
+            user_permissions = current_app.appbuilder.sm.get_current_user_permissions()
             all_dags_editable = (permissions.ACTION_CAN_EDIT, permissions.RESOURCE_DAG) in user_permissions
+            can_create_dag_run = (
+                permissions.ACTION_CAN_CREATE,
+                permissions.RESOURCE_DAG_RUN,
+            ) in user_permissions
+
+            can_delete_dag = (
+                permissions.ACTION_CAN_DELETE,
+                permissions.RESOURCE_DAG,
+            ) in user_permissions
 
             for dag in dags:
                 if all_dags_editable:
@@ -546,6 +547,8 @@ class Airflow(AirflowBaseView):  # noqa: D101  pylint: disable=too-many-public-m
                 else:
                     dag_resource_name = permissions.RESOURCE_DAG_PREFIX + dag.dag_id
                     dag.can_edit = (permissions.ACTION_CAN_EDIT, dag_resource_name) in user_permissions
+                dag.can_trigger = dag.can_edit and can_create_dag_run
+                dag.can_delete = can_delete_dag
 
             dagtags = session.query(DagTag.name).distinct(DagTag.name).all()
             tags = [
@@ -995,10 +998,7 @@ class Airflow(AirflowBaseView):  # noqa: D101  pylint: disable=too-many-public-m
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
         execution_date = request.args.get('execution_date')
-        if request.args.get('try_number') is not None:
-            try_number = int(request.args.get('try_number'))
-        else:
-            try_number = None
+        try_number = request.args.get('try_number', type=int)
         metadata = request.args.get('metadata')
         metadata = json.loads(metadata)
         response_format = request.args.get('format', 'json')
@@ -1406,7 +1406,7 @@ class Airflow(AirflowBaseView):  # noqa: D101  pylint: disable=too-many-public-m
     @expose('/trigger', methods=['POST', 'GET'])
     @auth.has_access(
         [
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG),
+            (permissions.ACTION_CAN_EDIT, permissions.RESOURCE_DAG),
             (permissions.ACTION_CAN_CREATE, permissions.RESOURCE_DAG_RUN),
         ]
     )
@@ -1868,10 +1868,8 @@ class Airflow(AirflowBaseView):  # noqa: D101  pylint: disable=too-many-public-m
             dag = dag.sub_dag(task_ids_or_regex=root, include_downstream=False, include_upstream=True)
 
         base_date = request.args.get('base_date')
-        num_runs = request.args.get('num_runs')
-        if num_runs:
-            num_runs = int(num_runs)
-        else:
+        num_runs = request.args.get('num_runs', type=int)
+        if num_runs is None:
             num_runs = conf.getint('webserver', 'default_dag_run_display_number')
 
         if base_date:
@@ -2121,8 +2119,7 @@ class Airflow(AirflowBaseView):  # noqa: D101  pylint: disable=too-many-public-m
             dag = None
 
         base_date = request.args.get('base_date')
-        num_runs = request.args.get('num_runs')
-        num_runs = int(num_runs) if num_runs else default_dag_run
+        num_runs = request.args.get('num_runs', default=default_dag_run, type=int)
 
         if dag is None:
             flash(f'DAG "{dag_id}" seems to be missing.', "error")
@@ -2246,8 +2243,7 @@ class Airflow(AirflowBaseView):  # noqa: D101  pylint: disable=too-many-public-m
         dag_id = request.args.get('dag_id')
         dag = current_app.dag_bag.get_dag(dag_id)
         base_date = request.args.get('base_date')
-        num_runs = request.args.get('num_runs')
-        num_runs = int(num_runs) if num_runs else default_dag_run
+        num_runs = request.args.get('num_runs', default=default_dag_run, type=int)
 
         if base_date:
             base_date = timezone.parse(base_date)
@@ -2319,8 +2315,7 @@ class Airflow(AirflowBaseView):  # noqa: D101  pylint: disable=too-many-public-m
         dag_id = request.args.get('dag_id')
         dag = current_app.dag_bag.get_dag(dag_id)
         base_date = request.args.get('base_date')
-        num_runs = request.args.get('num_runs')
-        num_runs = int(num_runs) if num_runs else default_dag_run
+        num_runs = request.args.get('num_runs', default=default_dag_run, type=int)
 
         if base_date:
             base_date = timezone.parse(base_date)
@@ -2824,6 +2819,10 @@ def lazy_add_provider_discovered_options_to_connection_form():
         choices=sorted(_get_connection_types(), key=itemgetter(1)),
         widget=Select2Widget(),
         validators=[InputRequired()],
+        description="""
+            Conn Type missing?
+            Make sure you've installed the corresponding Airflow Provider Package.
+        """,
     )
     for key, value in ProvidersManager().connection_form_widgets.items():
         setattr(ConnectionForm, key, value.field)
@@ -2908,9 +2907,13 @@ class ConnectionModelView(AirflowModelView):
 
     def process_form(self, form, is_created):
         """Process form data."""
-        formdata = form.data
-        if formdata['conn_type'] in ['jdbc', 'google_cloud_platform', 'grpc', 'yandexcloud', 'kubernetes']:
-            extra = {key: formdata[key] for key in self.extra_fields if key in formdata}
+        conn_type = form.data['conn_type']
+        extra = {
+            key: form.data[key]
+            for key in self.extra_fields
+            if key in form.data and key.startswith(f"extra__{conn_type}__")
+        }
+        if extra.keys():
             form.extra.data = json.dumps(extra)
 
     def prefill_form(self, form, pk):
@@ -2987,10 +2990,12 @@ class PluginView(AirflowBaseView):
             plugins.append(plugin_data)
 
         title = "Airflow Plugins"
+        doc_url = get_docs_url("plugins.html")
         return self.render_template(
             'airflow/plugin.html',
             plugins=plugins,
             title=title,
+            doc_url=doc_url,
         )
 
 
@@ -3542,10 +3547,14 @@ class TaskInstanceModelView(AirflowModelView):
         'queued_dttm',
         'try_number',
         'pool',
+        'queued_by_job_id',
+        'external_executor_id',
         'log_url',
     ]
 
-    order_columns = [item for item in list_columns if item not in ['try_number', 'log_url']]
+    order_columns = [
+        item for item in list_columns if item not in ['try_number', 'log_url', 'external_executor_id']
+    ]
 
     search_columns = [
         'state',

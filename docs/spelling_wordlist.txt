@@ -215,6 +215,7 @@ KeyManagementServiceClient
 Keyfile
 Kibana
 Kinesis
+Koka
 Kombu
 Kube
 Kubernetes
@@ -382,6 +383,7 @@ Vendorize
 Vertica
 Vevo
 VideoIntelligenceServiceClient
+Vikram
 WTF
 WaiterModel
 Wasb
@@ -598,6 +600,7 @@ customizable
 customizations
 cx
 dabf
+daemonize
 dagBag
 dagbag
 dagbags
@@ -1097,7 +1100,6 @@ pymssql
 pymysql
 pyodbc
 pypa
-pypi
 pytest
 pythonpath
 pywinrm
@@ -1362,6 +1364,7 @@ versionable
 vertica
 verticaql
 videointelligence
+vikramkoka
 virtualenv
 vm
 VolumeMount

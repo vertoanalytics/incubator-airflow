@@ -34,17 +34,23 @@
 import glob
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
 import airflow
-from airflow.configuration import default_config_yaml
+from airflow.configuration import AirflowConfigParser, default_config_yaml
+from docs.exts.docs_build.third_party_inventories import (  # pylint: disable=no-name-in-module,wrong-import-order
+    THIRD_PARTY_INDEXES,
+)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'exts'))
 
 CONF_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__)))
+INVENTORY_CACHE_DIR = os.path.join(CONF_DIR, '_inventory_cache')
 ROOT_DIR = os.path.abspath(os.path.join(CONF_DIR, os.pardir))
+FOR_PRODUCTION = os.environ.get('AIRFLOW_FOR_PRODUCTION', 'false') == 'true'
 
 # By default (e.g. on RTD), build docs for `airflow` package
 PACKAGE_NAME = os.environ.get('AIRFLOW_PACKAGE_NAME', 'apache-airflow')
@@ -69,7 +75,7 @@ elif PACKAGE_NAME.startswith('apache-airflow-providers-'):
 else:
     PACKAGE_DIR = None
     PACKAGE_VERSION = 'master'
-# Adds to environment variables for easy access from other plugins like airflow_internsphinx.
+# Adds to environment variables for easy access from other plugins like airflow_intersphinx.
 os.environ['AIRFLOW_PACKAGE_NAME'] = PACKAGE_NAME
 if PACKAGE_DIR:
     os.environ['AIRFLOW_PACKAGE_DIR'] = PACKAGE_DIR
@@ -226,13 +232,22 @@ if PACKAGE_NAME == 'apache-airflow':
     html_js_files = ['jira-links.js']
 else:
     html_js_files = []
+if PACKAGE_NAME == 'apache-airflow':
+    html_extra_path = [
+        f"{ROOT_DIR}/docs/apache-airflow/start/docker-compose.yaml",
+        f"{ROOT_DIR}/docs/apache-airflow/start/airflow.sh",
+    ]
 
 # -- Theme configuration -------------------------------------------------------
 # Custom sidebar templates, maps document names to template names.
 html_sidebars = {
     '**': [
-        # TODO(mik-laj): TODO: Add again on production version of documentation
-        # 'version-selector.html',
+        'version-selector.html',
+        'searchbox.html',
+        'globaltoc.html',
+    ]
+    if FOR_PRODUCTION
+    else [
         'searchbox.html',
         'globaltoc.html',
     ]
@@ -248,7 +263,7 @@ html_show_copyright = False
 html_theme_options: Dict[str, Any] = {
     'hide_website_buttons': True,
 }
-if os.environ.get('AIRFLOW_FOR_PRODUCTION', 'false') == 'true':
+if FOR_PRODUCTION:
     html_theme_options['navbar_links'] = [
         {'href': '/community/', 'text': 'Community'},
         {'href': '/meetups/', 'text': 'Meetups'},
@@ -294,7 +309,22 @@ html_context = {
 
 # Jinja context
 if PACKAGE_NAME == 'apache-airflow':
-    jinja_contexts = {'config_ctx': {"configs": default_config_yaml()}}
+    deprecated_options: Dict[str, Dict[str, Tuple[str, str, str]]] = defaultdict(dict)
+    for (section, key), (
+        (deprecated_section, deprecated_key, since_version)
+    ) in AirflowConfigParser.deprecated_options.items():
+        deprecated_options[deprecated_section][deprecated_key] = section, key, since_version
+
+    jinja_contexts = {
+        'config_ctx': {"configs": default_config_yaml(), "deprecated_options": deprecated_options},
+        'quick_start_ctx': {
+            'doc_root_url': (f'https://airflow.apache.org/docs/apache-airflow/{PACKAGE_VERSION}/')
+            if FOR_PRODUCTION
+            else (
+                'http://apache-airflow-docs.s3-website.eu-central-1.amazonaws.com/docs/apache-airflow/latest/'
+            )
+        },
+    }
 elif PACKAGE_NAME.startswith('apache-airflow-providers-'):
 
     def _load_config():
@@ -378,52 +408,56 @@ autodoc_default_options = {'show-inheritance': True, 'members': True}
 # -- Options for sphinx.ext.intersphinx ----------------------------------------
 # See: https://www.sphinx-doc.org/en/master/usage/extensions/intersphinx.html
 
-# This config value contains the locations and names of other projects that should
+# This config value contains names of other projects that should
 # be linked to in this documentation.
+# Inventories are only downloaded once by docs/exts/docs_build/fetch_inventories.py.
 intersphinx_mapping = {
-    'boto3': ('https://boto3.amazonaws.com/v1/documentation/api/latest/', None),
-    'celery': ('https://docs.celeryproject.org/en/stable/', None),
-    'hdfs': ('https://hdfscli.readthedocs.io/en/latest/', None),
-    'jinja2': ('https://jinja.palletsprojects.com/en/master/', None),
-    'mongodb': ('https://api.mongodb.com/python/current/', None),
-    'pandas': ('https://pandas.pydata.org/pandas-docs/stable/', None),
-    'python': ('https://docs.python.org/3/', None),
-    'requests': ('https://requests.readthedocs.io/en/master/', None),
-    'sqlalchemy': ('https://docs.sqlalchemy.org/en/latest/', None),
+    pkg_name: (f"{THIRD_PARTY_INDEXES[pkg_name]}/", (f'{INVENTORY_CACHE_DIR}/{pkg_name}/objects.inv',))
+    for pkg_name in [
+        'boto3',
+        'celery',
+        'hdfs',
+        'jinja2',
+        'mongodb',
+        'pandas',
+        'python',
+        'requests',
+        'sqlalchemy',
+    ]
 }
 if PACKAGE_NAME in ('apache-airflow-providers-google', 'apache-airflow'):
     intersphinx_mapping.update(
         {
-            'google-api-core': ('https://googleapis.dev/python/google-api-core/latest', None),
-            'google-cloud-automl': ('https://googleapis.dev/python/automl/latest', None),
-            'google-cloud-bigquery': ('https://googleapis.dev/python/bigquery/latest', None),
-            'google-cloud-bigquery-datatransfer': (
-                'https://googleapis.dev/python/bigquerydatatransfer/latest',
-                None,
-            ),
-            'google-cloud-bigquery-storage': ('https://googleapis.dev/python/bigquerystorage/latest', None),
-            'google-cloud-bigtable': ('https://googleapis.dev/python/bigtable/latest', None),
-            'google-cloud-container': ('https://googleapis.dev/python/container/latest', None),
-            'google-cloud-core': ('https://googleapis.dev/python/google-cloud-core/latest', None),
-            'google-cloud-datacatalog': ('https://googleapis.dev/python/datacatalog/latest', None),
-            'google-cloud-datastore': ('https://googleapis.dev/python/datastore/latest', None),
-            'google-cloud-dlp': ('https://googleapis.dev/python/dlp/latest', None),
-            'google-cloud-kms': ('https://googleapis.dev/python/cloudkms/latest', None),
-            'google-cloud-language': ('https://googleapis.dev/python/language/latest', None),
-            'google-cloud-monitoring': ('https://googleapis.dev/python/monitoring/latest', None),
-            'google-cloud-pubsub': ('https://googleapis.dev/python/pubsub/latest', None),
-            'google-cloud-redis': ('https://googleapis.dev/python/redis/latest', None),
-            'google-cloud-spanner': ('https://googleapis.dev/python/spanner/latest', None),
-            'google-cloud-speech': ('https://googleapis.dev/python/speech/latest', None),
-            'google-cloud-storage': ('https://googleapis.dev/python/storage/latest', None),
-            'google-cloud-tasks': ('https://googleapis.dev/python/cloudtasks/latest', None),
-            'google-cloud-texttospeech': ('https://googleapis.dev/python/texttospeech/latest', None),
-            'google-cloud-translate': ('https://googleapis.dev/python/translation/latest', None),
-            'google-cloud-videointelligence': (
-                'https://googleapis.dev/python/videointelligence/latest',
-                None,
-            ),
-            'google-cloud-vision': ('https://googleapis.dev/python/vision/latest', None),
+            pkg_name: (
+                f"{THIRD_PARTY_INDEXES[pkg_name]}/",
+                (f'{INVENTORY_CACHE_DIR}/{pkg_name}/objects.inv',),
+            )
+            for pkg_name in [
+                'google-api-core',
+                'google-cloud-automl',
+                'google-cloud-bigquery',
+                'google-cloud-bigquery-datatransfer',
+                'google-cloud-bigquery-storage',
+                'google-cloud-bigtable',
+                'google-cloud-container',
+                'google-cloud-core',
+                'google-cloud-datacatalog',
+                'google-cloud-datastore',
+                'google-cloud-dlp',
+                'google-cloud-kms',
+                'google-cloud-language',
+                'google-cloud-monitoring',
+                'google-cloud-pubsub',
+                'google-cloud-redis',
+                'google-cloud-spanner',
+                'google-cloud-speech',
+                'google-cloud-storage',
+                'google-cloud-tasks',
+                'google-cloud-texttospeech',
+                'google-cloud-translate',
+                'google-cloud-videointelligence',
+                'google-cloud-vision',
+            ]
         }
     )
 
